@@ -7,9 +7,7 @@ WORKDIR /app/api
 ENV POETRY_VERSION=2.0.1
 
 # if you located in China, you can use aliyun mirror to speed up
-# RUN pip install --no-cache-dir poetry==${POETRY_VERSION} -i https://mirrors.aliyun.com/pypi/simple/
-
-RUN pip install --no-cache-dir poetry==${POETRY_VERSION}
+RUN pip install --no-cache-dir poetry==${POETRY_VERSION} -i https://mirrors.aliyun.com/pypi/simple/
 
 # Configure Poetry
 ENV POETRY_CACHE_DIR=/tmp/poetry_cache
@@ -21,13 +19,16 @@ ENV POETRY_REQUESTS_TIMEOUT=15
 FROM base AS packages
 
 # if you located in China, you can use aliyun mirror to speed up
-# RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources
+RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc g++ libc-dev libffi-dev libgmp-dev libmpfr-dev libmpc-dev
 
 # Install Python dependencies
 COPY pyproject.toml poetry.lock ./
+ENV POETRY_HTTP_BASIC_PYPI_REPO_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV POETRY_HTTP_RETRY=5
+ENV POETRY_HTTP_TIMEOUT=120
 RUN poetry install --sync --no-cache --no-root
 
 # production stage
@@ -48,20 +49,23 @@ ENV TZ=UTC
 
 WORKDIR /app/api
 
+# if you located in China, you can use aliyun mirror to speed up
+RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources
+
 RUN \
     apt-get update \
     # Install dependencies
     && apt-get install -y --no-install-recommends \
-        # basic environment
-        curl nodejs libgmp-dev libmpfr-dev libmpc-dev \
-        # For Security
-        expat libldap-2.5-0 perl libsqlite3-0 zlib1g \
-        # install a chinese font to support the use of tools like matplotlib
-        fonts-noto-cjk \
-        # install a package to improve the accuracy of guessing mime type and file extension
-        media-types \
-        # install libmagic to support the use of python-magic guess MIMETYPE
-        libmagic1 \
+    # basic environment
+    curl nodejs libgmp-dev libmpfr-dev libmpc-dev \
+    # For Security
+    expat libldap-2.5-0 perl libsqlite3-0 zlib1g \
+    # install a chinese font to support the use of tools like matplotlib
+    fonts-noto-cjk \
+    # install a package to improve the accuracy of guessing mime type and file extension
+    media-types \
+    # install libmagic to support the use of python-magic guess MIMETYPE
+    libmagic1 \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
