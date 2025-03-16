@@ -18,6 +18,7 @@ from core.workflow.entities.node_entities import AgentNodeStrategyInit, NodeRunM
 from core.workflow.entities.variable_pool import VariablePool, VariableValue
 from core.workflow.graph_engine.condition_handlers.condition_manager import ConditionManager
 from core.workflow.graph_engine.entities.event import (
+    BaseAgentEvent,
     BaseIterationEvent,
     BaseLoopEvent,
     GraphEngineEvent,
@@ -502,7 +503,7 @@ class GraphEngine:
                     break
 
                 yield event
-                if event.parallel_id == parallel_id:
+                if not isinstance(event, BaseAgentEvent) and event.parallel_id == parallel_id:
                     if isinstance(event, ParallelBranchRunSucceededEvent):
                         succeeded_count += 1
                         if succeeded_count == len(futures):
@@ -872,11 +873,12 @@ class GraphEngine:
     def create_copy(self):
         """
         create a graph engine copy
-        :return: with a new variable pool instance of graph engine
+        :return: graph engine with a new variable pool and initialized total tokens
         """
         new_instance = copy(self)
         new_instance.graph_runtime_state = copy(self.graph_runtime_state)
         new_instance.graph_runtime_state.variable_pool = deepcopy(self.graph_runtime_state.variable_pool)
+        new_instance.graph_runtime_state.total_tokens = 0
         return new_instance
 
     def _handle_continue_on_error(
