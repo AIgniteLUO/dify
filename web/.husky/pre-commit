@@ -10,10 +10,10 @@ for file in $files
 do
     if [[ $file == "api/"* && $file == *.py ]]; then
         # set api_modified flag to true
-        api_modified=true
+        api_modified=false
     elif [[ $file == "web/"* ]]; then
         # set web_modified flag to true
-        web_modified=true
+        web_modified=false
     fi
 done
 

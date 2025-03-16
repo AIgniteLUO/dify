@@ -63,6 +63,10 @@ class FileService:
 
         file_key = "upload_files/" + (current_tenant_id or "") + "/" + file_uuid + "." + extension
 
+        # update-begin-author: luo_jj date:2025-03-05 for: 使 sandbox 代码执行沙盒环境可以访问用户上传的文件
+        source_url = '/app/api/storage/' + file_key if not source_url else source_url
+        # update-end-author: luo_jj date:2025-03-05 for: 使 sandbox 代码执行沙盒环境可以访问用户上传的文件
+
         # save file to storage
         storage.save(file_key, content)
 
