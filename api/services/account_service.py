@@ -108,17 +108,20 @@ class AccountService:
         if account.status == AccountStatus.BANNED.value:
             raise Unauthorized("Account is banned.")
 
-        current_tenant = TenantAccountJoin.query.filter_by(account_id=account.id, current=True).first()
+        current_tenant = db.session.query(TenantAccountJoin).filter_by(account_id=account.id, current=True).first()
         if current_tenant:
-            account.current_tenant_id = current_tenant.tenant_id
+            account.set_tenant_id(current_tenant.tenant_id)
         else:
             available_ta = (
-                TenantAccountJoin.query.filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
+                db.session.query(TenantAccountJoin)
+                .filter_by(account_id=account.id)
+                .order_by(TenantAccountJoin.id.asc())
+                .first()
             )
             if not available_ta:
                 return None
 
-            account.current_tenant_id = available_ta.tenant_id
+            account.set_tenant_id(available_ta.tenant_id)
             available_ta.current = True
             db.session.commit()
 
@@ -407,10 +410,8 @@ class AccountService:
 
             raise PasswordResetRateLimitExceededError()
 
-        code = "".join([str(random.randint(0, 9)) for _ in range(6)])
-        token = TokenManager.generate_token(
-            account=account, email=email, token_type="reset_password", additional_data={"code": code}
-        )
+        code, token = cls.generate_reset_password_token(account_email, account)
+
         send_reset_password_mail_task.delay(
             language=language,
             to=account_email,
@@ -418,6 +419,22 @@ class AccountService:
         )
         cls.reset_password_rate_limiter.increment_rate_limit(account_email)
         return token
+
+    @classmethod
+    def generate_reset_password_token(
+        cls,
+        email: str,
+        account: Optional[Account] = None,
+        code: Optional[str] = None,
+        additional_data: dict[str, Any] = {},
+    ):
+        if not code:
+            code = "".join([str(random.randint(0, 9)) for _ in range(6)])
+        additional_data["code"] = code
+        token = TokenManager.generate_token(
+            account=account, email=email, token_type="reset_password", additional_data=additional_data
+        )
+        return code, token
 
     @classmethod
     def revoke_reset_password_token(cls, token: str):
@@ -571,10 +588,6 @@ class AccountService:
         return False
 
 
-def _get_login_cache_key(*, account_id: str, token: str):
-    return f"account_login:{account_id}:{token}"
-
-
 class TenantService:
     @staticmethod
     def create_tenant(name: str, is_setup: Optional[bool] = False, is_from_dashboard: Optional[bool] = False) -> Tenant:
@@ -690,7 +703,7 @@ class TenantService:
             ).update({"current": False})
             tenant_account_join.current = True
             # Set the current tenant for the account
-            account.current_tenant_id = tenant_account_join.tenant_id
+            account.set_tenant_id(tenant_account_join.tenant_id)
             db.session.commit()
 
     @staticmethod
@@ -785,8 +798,10 @@ class TenantService:
     @staticmethod
     def remove_member_from_tenant(tenant: Tenant, account: Account, operator: Account) -> None:
         """Remove member from tenant"""
-        if operator.id == account.id and TenantService.check_member_permission(tenant, operator, account, "remove"):
+        if operator.id == account.id:
             raise CannotOperateSelfError("Cannot operate self.")
+
+        TenantService.check_member_permission(tenant, operator, account, "remove")
 
         ta = TenantAccountJoin.query.filter_by(tenant_id=tenant.id, account_id=account.id).first()
         if not ta:
@@ -911,6 +926,8 @@ class RegisterService:
             db.session.commit()
         except WorkSpaceNotAllowedCreateError:
             db.session.rollback()
+            logging.exception("Register failed")
+            raise AccountRegisterError("Workspace is not allowed to create.")
         except AccountRegisterError as are:
             db.session.rollback()
             logging.exception("Register failed")

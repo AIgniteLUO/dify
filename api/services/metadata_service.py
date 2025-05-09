@@ -3,7 +3,7 @@ import datetime
 import logging
 from typing import Optional
 
-from flask_login import current_user  # type: ignore
+from flask_login import current_user
 
 from core.rag.index_processor.constant.built_in_field import BuiltInField, MetadataDataSource
 from extensions.ext_database import db
@@ -137,7 +137,7 @@ class MetadataService:
                     doc_metadata[BuiltInField.source.value] = MetadataDataSource[document.data_source_type].value
                     document.doc_metadata = doc_metadata
                     db.session.add(document)
-                db.session.commit()
+            db.session.commit()
         except Exception:
             logging.exception("Enable built-in field failed")
         finally:
